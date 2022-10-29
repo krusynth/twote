@@ -27,6 +27,12 @@ node twote.js --number=100 --start=200
 
 And so forth. The script will automatically append the rows to the bottom of the `output.csv` file if the `start` value is greater than zero.
 
+Alternatively, if the script has an unexpected error and fails, you can restart from wherever you left off by specifying the userid to begin with:
+
+```
+node twote.js --number=250 --userid=123345789
+```
+
 
 ## Caveats
 
