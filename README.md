@@ -12,12 +12,22 @@ First, request your data archive from the bird site. This can be done by going t
 
 Next, download a copy of this repo, and expand it. Use node to install the dependencies. Typically you'll just need to run `npm install` in the directory of this script.
 
-The data archive from the bird site should contain a `following.js` file, copy that into the directory where you've installed this repo.
+The data archive from the bird site should contain a `following.js` file in the `data` folder – copy that into the directory where you've installed this repo.
 
 Run `node twote.js` to generate a CSV file of users and any potential accounts they might have. The results will be put into `output.csv` in the same directory.
+
+If you're following a **lot** of folks, you'll want to do this in batches instead. You can specify a `number` parameter for how many users to fetch, and `start` for the row number to start at. So, one could run in series:
+
+```
+node twote.js --number=100 --start=0
+node twote.js --number=100 --start=100
+node twote.js --number=100 --start=200
+...
+```
+
+And so forth. The script will automatically append the rows to the bottom of the `output.csv` file if the `start` value is greater than zero.
+
 
 ## Caveats
 
 At the moment, it is extremely likely that you will likely have some false positives in the CSV, which is why we're not using the API to automatically add them. You'll want to validate the addresses manually. We apologize for any inconvenience.
-
-This will probably break if you're following a HUGE amount of people.

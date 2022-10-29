@@ -2,14 +2,31 @@ const fs = require('fs');
 const https = require('https');
 const puppeteer = require('puppeteer');
 const cheerio = require('cheerio');
-const { writeToPath } = require('@fast-csv/format');
+const { writeToStream } = require('@fast-csv/format');
+const yargs = require('yargs');
+
+var argv = require('yargs/yargs')(process.argv.slice(2))
+  .option('start', {
+    alias: 's',
+    description: 'Person number to start at. (default: 0)',
+    type: 'number'
+  })
+  .option('number', {
+    alias: 'n',
+    description: 'How many people to process. (default: all)',
+    type: 'number'
+  })
+  .option('userid', {
+    alias: 'u',
+    description: 'A user ID number to start at. (defualt: null)',
+    type: 'number'
+  }).argv;
 
 /* Config */
 
 // Theres a javascript redirect we need to account for. If your machine or
 // connection are slow, you may need to increase this number.
 const delay = 1000; // milliseconds
-
 
 async function main() {
   const browser = await puppeteer.launch();
@@ -18,7 +35,6 @@ async function main() {
   let followingStr;
 
   let output = [];
-  output.push(['Name', 'Username', 'Possible Accounts']);
 
   try {
     followingStr = fs.readFileSync('./following.js', 'utf8');
@@ -34,11 +50,22 @@ async function main() {
   // Free memory
   delete followingStr;
 
-  let count = followingData.length;
-  // count = 1; /*** DEBUG ***/
+  let number = argv.number || followingData.length;
+  let start = argv.start || 0;
 
-  for(let i = 0; i < count; i++) {
-    console.log('Fetching ' + followingData[i].following.accountId);
+  if(argv.userid) {
+    for(let j = 0; j < followingData.length; j++) {
+      if(followingData[j].following.accountId == argv.userid) {
+        start = j;
+        break;
+      }
+    }
+  }
+
+  // console.log('params:', start, number);
+
+  for(let i = start; i < (number + start); i++) {
+    console.log(`${i} Fetching ` + followingData[i].following.accountId);
     let url = followingData[i].following.userLink;
     // url = 'https://twitter.com/intent/user?user_id=YOURACCTNUMBERHERE' /*** DEBUG ***/
 
@@ -52,8 +79,22 @@ async function main() {
 
   browser.close();
 
+  let fileArgs = {};
+  let writeArgs = {
+    includeEndRowDelimiter: true
+  };
+
+  if(start > 0) {
+    fileArgs.flags = 'a';
+  }
+  else {
+    output.unshift(['Name', 'Username', 'Possible Accounts']);
+  }
+
   return new Promise((resolve, reject) => {
-    writeToPath('output.csv', output)
+    let stream = fs.createWriteStream('output.csv', fileArgs);
+
+    writeToStream(stream, output, writeArgs)
       .on('error', err => reject(err))
       .on('finish', () => resolve());
   });
@@ -89,7 +130,8 @@ async function main() {
 
     user.profile = $('[data-testid=UserDescription]').text();
 
-    // TODO: Some error handling here probably.
+    // TODO: Some better error handling here probably.
+    if(!user.handle) console.error('Something went wrong!')
 
     return user;
   }
