@@ -64,7 +64,13 @@ async function main() {
 
   // console.log('params:', start, number);
 
-  for(let i = start; i < (number + start); i++) {
+  let end = number + start;
+  if(end > followingData.length) {
+    end = followingData.length;
+  }
+
+
+  for(let i = start; i < end; i++) {
     console.log(`${i} Fetching ` + followingData[i].following.accountId);
     let url = followingData[i].following.userLink;
     // url = 'https://twitter.com/intent/user?user_id=YOURACCTNUMBERHERE' /*** DEBUG ***/
