@@ -2,7 +2,6 @@ const fs = require('fs');
 const https = require('https');
 const puppeteer = require('puppeteer');
 const cheerio = require('cheerio');
-const { writeToStream } = require('@fast-csv/format');
 const yargs = require('yargs');
 
 var argv = require('yargs/yargs')(process.argv.slice(2))
@@ -18,15 +17,28 @@ var argv = require('yargs/yargs')(process.argv.slice(2))
   })
   .option('userid', {
     alias: 'u',
-    description: 'A user ID number to start at. (defualt: null)',
+    description: 'A user ID number to start at. (default: null)',
     type: 'number'
-  }).argv;
+  })
+  /*
+    On loading the initial page, there's a javascript redirect from the user's
+    identifier number to their handle page. That takes about a second on most
+    computers.
 
-/* Config */
+    The user's content is then dynamically loaded, so to get pinned tweets we
+    must wait another two seconds.
 
-// Theres a javascript redirect we need to account for. If your machine or
-// connection are slow, you may need to increase this number.
-const delay = 1000; // milliseconds
+     If your computer or connection are slow, you may need to increase this
+     number further.
+  */
+  .option('delay', {
+    alias: 'd',
+    description: 'Milliseconds to wait for page to load. (default 3000)',
+    type: 'number',
+    default: 3000
+  })
+  .argv;
+
 
 async function main() {
   const browser = await puppeteer.launch();
@@ -69,41 +81,40 @@ async function main() {
     end = followingData.length;
   }
 
+  let fileArgs = {};
+  let writeArgs = {
+    includeEndRowDelimiter: true
+  };
+
+  // If this isn't the first record, append to the existing csv.
+  if(start > 0) {
+    fileArgs.flags = 'a';
+  }
+
+  let stream = fs.createWriteStream('output.csv', fileArgs);
+
+  // If this *is* the first record, we need to write our headers.
+  if(start == 0) {
+    await write(stream, ['Name', 'Username', 'Possible Accounts']);
+  }
+
 
   for(let i = start; i < end; i++) {
     console.log(`${i} Fetching ` + followingData[i].following.accountId);
     let url = followingData[i].following.userLink;
     // url = 'https://twitter.com/intent/user?user_id=YOURACCTNUMBERHERE' /*** DEBUG ***/
 
-    let user = scrapeUser(await getUser(url));
+    let userData = await getUser(url);
+    let user = scrapeUser(userData);
     user.links = processUserData(user);
 
     // console.log(user);
 
-    output.push([user.name, user.handle, ...user.links]);
+    await write(stream, [user.name, user.handle, ...user.links]);
   }
 
   browser.close();
-
-  let fileArgs = {};
-  let writeArgs = {
-    includeEndRowDelimiter: true
-  };
-
-  if(start > 0) {
-    fileArgs.flags = 'a';
-  }
-  else {
-    output.unshift(['Name', 'Username', 'Possible Accounts']);
-  }
-
-  return new Promise((resolve, reject) => {
-    let stream = fs.createWriteStream('output.csv', fileArgs);
-
-    writeToStream(stream, output, writeArgs)
-      .on('error', err => reject(err))
-      .on('finish', () => resolve());
-  });
+  stream.close();
 
   /* Function Hoisting */
 
@@ -111,7 +122,7 @@ async function main() {
     const pg = await browser.newPage();
     await pg.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36');
     await pg.goto(url);
-    await pg.waitForTimeout(delay);
+    await pg.waitForTimeout(argv.delay);
     let body = await pg.evaluate(() => document.body.innerHTML);
     await pg.close();
 
@@ -125,16 +136,21 @@ async function main() {
 
     const $ = cheerio.load(data);
 
-    // This is ugly. The html generated on this page is unsemantic css-class noise.
-    // Those classes appear to change over time. We brute force regex the user data.
     // Users may have @s in their name, so we need to account for that.
-
     let name = $('[data-testid=UserName]').text().split('@');
 
-    user.handle = '@'+name.pop(); // The last @name is the user's handle.
-    user.name = name.join('@'); // Everything else is their name-name.
+    user.handle = clean('@'+name.pop()); // The last @name is the user's handle.
+    user.name = clean(name.join('@')); // Everything else is their name-name.
 
     user.profile = $('[data-testid=UserDescription]').text();
+
+    // Try to find a pinned tweet.
+    try {
+      const pinned = $('article[data-testid=tweet]').first();
+      if($(pinned).find('[data-testid=socialContext]').text().trim().toLowerCase() == 'pinned tweet') {
+        user.pinned = $(pinned).find('[data-testid=tweetText]').text();
+      }
+    } catch(e) { /* do nothing, most people don't have pinned tweets. */ }
 
     // TODO: Some better error handling here probably.
     if(!user.handle) console.error('Something went wrong!')
@@ -146,6 +162,9 @@ async function main() {
     let results = [];
     results = results.concat(findMastodonLinks(user.name));
     results = results.concat(findMastodonLinks(user.profile));
+    if(user.pinned) {
+      results = results.concat(findMastodonLinks(user.pinned));
+    }
 
     return results;
   }
@@ -187,7 +206,27 @@ async function main() {
     }
     // console.log(results);
 
+    for(let k = 0; k < results.length; k++) {
+      results[k] = clean(results[k]);
+    }
+
+    // Remove duplicates
+    results = [...new Set(results)];
+
     return results;
+  }
+
+  function write(stream, output) {
+    let line  = output.join(',') + "\n";
+    return stream.write(line);
+  }
+
+  function clean(output) {
+    // Remove commas and newlines.
+    return output
+      .replace(/,/g, ' ')
+      .replace(/(?:\r\n|\r|\n)/g, ' ')
+      .trim();
   }
 }
 

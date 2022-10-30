@@ -14,7 +14,6 @@
   "license": "MIT",
   "dependencies": {
     "cheerio": "^1.0.0-rc.12",
-    "fast-csv": "^4.3.6",
     "puppeteer": "^19.2.0",
     "yargs": "^17.6.0"
   }

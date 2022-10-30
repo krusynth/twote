@@ -1,8 +1,8 @@
 # twote : Bird Site to Mammoth Site Migrator
 
-This script uses a data file of users from a certain bird-enthusiasts website and searches their bios for any related mammoth-enthusiast website links.
+This script uses a data file of users from a certain bird-enthusiasts website and searches their **bios, names, and pinned tweets** for any related mammoth-enthusiast website links.
 
-Please note that it does **not** search their posts, however - for that, it is recommended you search for `mastodon filter:follows` on the bird site.
+Please note that it does **not** search all of their posts, however - for that, it is recommended you search for `mastodon filter:follows` on the bird site.
 
 ## How to Use
 
